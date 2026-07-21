@@ -379,14 +379,15 @@ async function loadProviders() {
 
 async function loadSettings() {
     try {
-        const [settings, providers] = await Promise.all([
+        const [settings, providers, emailProviders] = await Promise.all([
             api("GET", "/api/settings"),
             loadProviders(),
+            loadEmailProviders(),
         ]);
 
         // LLM 配置
         document.getElementById("set-llm-provider").value = settings.llm_provider || "deepseek";
-        await onProviderChange(); // 填充模型列表
+        await onProviderChange();
         if (settings.llm_model) {
             const modelSelect = document.getElementById("set-llm-model");
             if ([...modelSelect.options].some(o => o.value === settings.llm_model)) {
@@ -400,6 +401,17 @@ async function loadSettings() {
         document.getElementById("set-werss-url").value = settings.we_mp_rss_url || "";
         document.getElementById("set-werss-user").value = settings.we_mp_rss_user || "";
         document.getElementById("set-werss-pass").value = settings.we_mp_rss_pass || "";
+
+        // 邮箱配置
+        document.getElementById("set-email-provider").value = settings.email_provider || "gmail";
+        document.getElementById("set-email-address").value = settings.email_address || "";
+        document.getElementById("set-email-password").placeholder =
+            settings.email_password_set ? "已配置（输入新值可替换）" : "应用专用密码或SMTP授权码";
+        document.getElementById("set-smtp-server").value = settings.smtp_server || "smtp.gmail.com";
+        document.getElementById("set-smtp-port").value = settings.smtp_port || 587;
+        document.getElementById("set-imap-server").value = settings.imap_server || "imap.gmail.com";
+        document.getElementById("set-imap-port").value = settings.imap_port || 993;
+        onEmailProviderChange(); // 显示帮助文字
 
         // 用户信息
         document.getElementById("set-user-name").value = settings.user_name || "";
@@ -422,6 +434,40 @@ async function onProviderChange() {
     modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join("");
 }
 
+// ── 邮箱供应商 ──
+let emailProvidersCache = null;
+
+async function loadEmailProviders() {
+    if (!emailProvidersCache) {
+        try {
+            emailProvidersCache = await api("GET", "/api/email-providers");
+        } catch (e) {
+            emailProvidersCache = {};
+        }
+    }
+    return emailProvidersCache;
+}
+
+function onEmailProviderChange() {
+    const provider = document.getElementById("set-email-provider").value;
+    loadEmailProviders().then(providers => {
+        const p = providers[provider];
+        if (!p) return;
+        // 自动填充 SMTP/IMAP（自定义模式除外）
+        if (provider !== "custom") {
+            document.getElementById("set-smtp-server").value = p.smtp_server || "";
+            document.getElementById("set-smtp-port").value = p.smtp_port || 587;
+            document.getElementById("set-imap-server").value = p.imap_server || "";
+            document.getElementById("set-imap-port").value = p.imap_port || 993;
+        }
+        // 显示帮助文字
+        const helpEl = document.getElementById("set-email-help");
+        if (helpEl) {
+            helpEl.textContent = p.help ? `💡 ${p.help}` : "";
+        }
+    });
+}
+
 async function saveSettings() {
     const data = {
         llm_provider: document.getElementById("set-llm-provider").value,
@@ -429,6 +475,12 @@ async function saveSettings() {
         we_mp_rss_url: document.getElementById("set-werss-url").value,
         we_mp_rss_user: document.getElementById("set-werss-user").value,
         we_mp_rss_pass: document.getElementById("set-werss-pass").value,
+        email_provider: document.getElementById("set-email-provider").value,
+        email_address: document.getElementById("set-email-address").value,
+        smtp_server: document.getElementById("set-smtp-server").value,
+        smtp_port: parseInt(document.getElementById("set-smtp-port").value) || 587,
+        imap_server: document.getElementById("set-imap-server").value,
+        imap_port: parseInt(document.getElementById("set-imap-port").value) || 993,
         user_name: document.getElementById("set-user-name").value,
         user_education: document.getElementById("set-user-education").value,
         job_preferences: document.getElementById("set-job-pref").value,
@@ -439,6 +491,8 @@ async function saveSettings() {
     };
     const apiKey = document.getElementById("set-llm-api-key").value;
     if (apiKey) data.llm_api_key = apiKey;
+    const emailPass = document.getElementById("set-email-password").value;
+    if (emailPass) data.email_password = emailPass;
 
     try {
         await api("POST", "/api/settings", data);

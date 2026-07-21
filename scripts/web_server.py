@@ -281,11 +281,16 @@ def send_job(job_id):
     # 调用现有邮件发送模块
     try:
         from send_application_email import send_email
+        settings = load_settings()
         success = send_email(
             receiver_email=job["receiver_email"],
             subject=job["subject"],
             body=job["cover_letter"],
             attachment_path=resume_path,
+            sender_email=settings.get("email_address", "") or None,
+            app_password=settings.get("email_password", "") or None,
+            smtp_server=settings.get("smtp_server", "smtp.gmail.com"),
+            smtp_port=settings.get("smtp_port", 587),
         )
     except Exception as e:
         success = False
@@ -367,6 +372,57 @@ DEFAULT_SETTINGS = {
     "work_location": "",
     "available_time": "",
     "email_subject_format": "",
+    "email_provider": "gmail",
+    "email_address": "",
+    "email_password": "",
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "imap_server": "imap.gmail.com",
+    "imap_port": 993,
+}
+
+# 邮箱供应商预设
+EMAIL_PROVIDERS = {
+    "gmail": {
+        "name": "Gmail",
+        "smtp_server": "smtp.gmail.com",
+        "smtp_port": 587,
+        "imap_server": "imap.gmail.com",
+        "imap_port": 993,
+        "help": "Google账户 > 安全性 > 两步验证 > 应用密码",
+    },
+    "qq": {
+        "name": "QQ邮箱",
+        "smtp_server": "smtp.qq.com",
+        "smtp_port": 587,
+        "imap_server": "imap.qq.com",
+        "imap_port": 993,
+        "help": "QQ邮箱 > 设置 > 账户 > 开启IMAP/SMTP服务 > 生成授权码",
+    },
+    "163": {
+        "name": "163邮箱",
+        "smtp_server": "smtp.163.com",
+        "smtp_port": 587,
+        "imap_server": "imap.163.com",
+        "imap_port": 993,
+        "help": "163邮箱 > 设置 > POP3/SMTP/IMAP > 开启IMAP/SMTP > 设置客户端授权密码",
+    },
+    "outlook": {
+        "name": "Outlook / Hotmail",
+        "smtp_server": "smtp.office365.com",
+        "smtp_port": 587,
+        "imap_server": "outlook.office365.com",
+        "imap_port": 993,
+        "help": "Microsoft账户 > 安全 > 应用密码",
+    },
+    "custom": {
+        "name": "自定义",
+        "smtp_server": "",
+        "smtp_port": 587,
+        "imap_server": "",
+        "imap_port": 993,
+        "help": "手动填写SMTP/IMAP服务器信息",
+    },
 }
 
 
@@ -393,11 +449,14 @@ def save_settings(settings):
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
     settings = load_settings()
-    # 脱敏：API key 只返回是否已设置
+    # 脱敏：API key 和邮箱密码只返回是否已设置
     has_key = bool(settings.get("llm_api_key"))
+    has_email_pass = bool(settings.get("email_password"))
     safe = dict(settings)
     safe["llm_api_key"] = "***" if has_key else ""
     safe["llm_api_key_set"] = has_key
+    safe["email_password"] = "***" if has_email_pass else ""
+    safe["email_password_set"] = has_email_pass
     return jsonify(safe)
 
 
@@ -407,8 +466,8 @@ def update_settings():
     settings = load_settings()
     for k, v in data.items():
         if k in DEFAULT_SETTINGS:
-            # 如果 API key 字段收到 "***" 或空值，保留原值
-            if k == "llm_api_key" and (v == "***" or v == ""):
+            # 敏感字段收到 "***" 或空值时保留原值
+            if k in ("llm_api_key", "email_password") and (v == "***" or v == ""):
                 continue
             settings[k] = v
     save_settings(settings)
@@ -420,6 +479,12 @@ def get_providers():
     """返回支持的 LLM 供应商列表"""
     from llm_client import get_provider_info
     return jsonify(get_provider_info())
+
+
+@app.route("/api/email-providers", methods=["GET"])
+def get_email_providers():
+    """返回支持的邮箱供应商列表"""
+    return jsonify(EMAIL_PROVIDERS)
 
 
 # ══════════════════════════════════════════════════════════

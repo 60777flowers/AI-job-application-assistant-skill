@@ -127,6 +127,49 @@
                     </div>
                 </div>
 
+                <!-- 邮箱配置 -->
+                <div class="settings-card">
+                    <h2>📧 邮箱配置</h2>
+                    <p class="settings-desc">用于发送投递邮件和检查收件箱回复。支持 Gmail、QQ邮箱、163邮箱、Outlook 等。</p>
+                    <div class="settings-grid">
+                        <div class="settings-item">
+                            <label>邮箱供应商</label>
+                            <select id="set-email-provider" onchange="onEmailProviderChange()">
+                                <option value="gmail">Gmail</option>
+                                <option value="qq">QQ邮箱</option>
+                                <option value="163">163邮箱</option>
+                                <option value="outlook">Outlook / Hotmail</option>
+                                <option value="custom">自定义</option>
+                            </select>
+                        </div>
+                        <div class="settings-item">
+                            <label>邮箱地址</label>
+                            <input type="text" id="set-email-address" placeholder="your@email.com">
+                        </div>
+                        <div class="settings-item full">
+                            <label>应用密码 / 授权码</label>
+                            <input type="password" id="set-email-password" placeholder="应用专用密码或SMTP授权码" autocomplete="off">
+                            <span class="settings-help" id="set-email-help"></span>
+                        </div>
+                        <div class="settings-item">
+                            <label>SMTP服务器</label>
+                            <input type="text" id="set-smtp-server" placeholder="smtp.gmail.com">
+                        </div>
+                        <div class="settings-item">
+                            <label>SMTP端口</label>
+                            <input type="number" id="set-smtp-port" value="587" min="1" max="65535">
+                        </div>
+                        <div class="settings-item">
+                            <label>IMAP服务器</label>
+                            <input type="text" id="set-imap-server" placeholder="imap.gmail.com">
+                        </div>
+                        <div class="settings-item">
+                            <label>IMAP端口</label>
+                            <input type="number" id="set-imap-port" value="993" min="1" max="65535">
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 用户背景 -->
                 <div class="settings-card">
                     <h2>👤 个人信息</h2>

@@ -17,11 +17,11 @@ from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 
 
-# Gmail配置 - 通过环境变量或配置文件读取，请勿硬编码
+# 邮箱配置 - 通过环境变量、命令行参数或settings.json读取
 GMAIL_USER = os.environ.get("GMAIL_USER", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
-IMAP_SERVER = "imap.gmail.com"
-IMAP_PORT = 993
+IMAP_SERVER = os.environ.get("IMAP_SERVER", "imap.gmail.com")
+IMAP_PORT = int(os.environ.get("IMAP_PORT", "993"))
 
 # 已投递公司邮箱列表（从投递记录.csv动态读取更佳，这里作为示例）
 KNOWN_REPLY_EMAILS = [
@@ -93,13 +93,26 @@ def get_email_body(msg):
     return body.strip()[:500]  # 只取前500字符
 
 
-def check_inbox(days=7):
-    """检查Gmail收件箱中的求职回复"""
-    print(f"连接Gmail IMAP服务器...")
+def check_inbox(days=7, imap_server=None, imap_port=None, email_user=None, email_pass=None):
+    """检查邮箱收件箱中的求职回复"""
+    imap_server = imap_server or IMAP_SERVER
+    imap_port = imap_port or IMAP_PORT
+    email_user = email_user or GMAIL_USER
+    email_pass = email_pass or GMAIL_APP_PASSWORD
+
+    if not email_user or not email_pass:
+        print("错误: 邮箱地址或密码未配置")
+        print("请通过以下方式之一配置:")
+        print("  1. 环境变量: GMAIL_USER, GMAIL_APP_PASSWORD, IMAP_SERVER, IMAP_PORT")
+        print("  2. 命令行参数: --email --password --imap-server --imap-port")
+        print("  3. settings.json (Web后台设置页配置)")
+        return []
+
+    print(f"连接IMAP服务器 {imap_server}:{imap_port}...")
     
     try:
-        mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
-        mail.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+        mail = imaplib.IMAP4_SSL(imap_server, imap_port)
+        mail.login(email_user, email_pass)
         mail.select("inbox")
         print("登录成功")
     except Exception as e:
@@ -178,13 +191,37 @@ def check_inbox(days=7):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Gmail收件箱求职回复检查")
+    parser = argparse.ArgumentParser(description="邮箱收件箱求职回复检查")
     parser.add_argument("--days", type=int, default=7, help="检查最近N天的邮件")
     parser.add_argument("--output", default=None, help="输出文件路径")
+    parser.add_argument("--email", help="邮箱地址（覆盖环境变量）")
+    parser.add_argument("--password", help="邮箱应用密码/授权码（覆盖环境变量）")
+    parser.add_argument("--imap-server", help="IMAP服务器地址（覆盖环境变量）")
+    parser.add_argument("--imap-port", type=int, help="IMAP端口（覆盖环境变量）")
     args = parser.parse_args()
-    
-    print(f"检查最近 {args.days} 天的Gmail收件箱...")
-    replies = check_inbox(days=args.days)
+
+    # 尝试从 settings.json 读取配置（如果环境变量/CLI参数未提供）
+    if not args.email and not GMAIL_USER:
+        settings_path = os.path.join(os.getcwd(), "settings.json")
+        if not os.path.exists(settings_path):
+            # 也尝试脚本所在目录的上级
+            settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.json")
+        if os.path.exists(settings_path):
+            with open(settings_path, "r", encoding="utf-8") as f:
+                s = json.load(f)
+            args.email = s.get("email_address", "")
+            args.password = s.get("email_password", "")
+            args.imap_server = args.imap_server or s.get("imap_server", "")
+            args.imap_port = args.imap_port or s.get("imap_port", 993)
+
+    print(f"检查最近 {args.days} 天的收件箱...")
+    replies = check_inbox(
+        days=args.days,
+        imap_server=args.imap_server,
+        imap_port=args.imap_port,
+        email_user=args.email,
+        email_pass=args.password,
+    )
     
     print(f"\n找到 {len(replies)} 封求职相关邮件")
     

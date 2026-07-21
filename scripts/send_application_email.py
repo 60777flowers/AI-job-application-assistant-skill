@@ -50,37 +50,40 @@ def load_config(config_path=None):
     return config
 
 
-def send_email(receiver_email, subject, body, attachment_path=None, sender_email=None, app_password=None):
+def send_email(receiver_email, subject, body, attachment_path=None, sender_email=None,
+               app_password=None, smtp_server="smtp.gmail.com", smtp_port=587):
     """
     发送带附件的邮件
-    
+
     Args:
         receiver_email: 收件人邮箱
         subject: 邮件主题
         body: 邮件正文
         attachment_path: 附件文件路径（可选）
         sender_email: 发件人邮箱
-        app_password: Gmail应用密码
+        app_password: 邮箱应用密码/授权码
+        smtp_server: SMTP服务器地址（默认smtp.gmail.com）
+        smtp_port: SMTP端口（默认587）
     """
     if sender_email is None or app_password is None:
         config = load_config()
         sender_email = sender_email or config["email"]
         app_password = app_password or config["password"]
-    
+
     # 创建邮件对象
     msg = MIMEMultipart()
     msg['From'] = sender_email
     msg['To'] = receiver_email
     msg['Subject'] = subject
-    
+
     # 添加邮件正文
     msg.attach(MIMEText(body, 'plain', 'utf-8'))
-    
+
     # 添加附件
     if attachment_path and os.path.exists(attachment_path):
         with open(attachment_path, "rb") as attachment:
             part = MIMEApplication(attachment.read(), _subtype="pdf")
-        
+
         part.add_header(
             'Content-Disposition',
             'attachment',
@@ -90,10 +93,10 @@ def send_email(receiver_email, subject, body, attachment_path=None, sender_email
         print(f"附件已添加: {os.path.basename(attachment_path)} ({os.path.getsize(attachment_path)} bytes)")
     elif attachment_path:
         print(f"警告: 附件文件不存在: {attachment_path}")
-    
+
     # 发送邮件
     try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
         server.login(sender_email, app_password)
         text = msg.as_string()

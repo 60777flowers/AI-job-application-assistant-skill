@@ -150,15 +150,45 @@ docker run -d \
 
 > we-mp-rss 项目地址：https://github.com/rachelos/we-mp-rss
 
-### 步骤3：配置 Gmail
+### 步骤3：配置邮箱
 
-1. 开启 Google 两步验证
-2. 生成应用专用密码（Google账户 > 安全性 > 应用密码）
-3. 创建 `gmail_config.txt`（放在数据目录中）：
+支持 Gmail、QQ邮箱、163邮箱、Outlook 以及自定义SMTP/IMAP服务器。
+
+#### 方式一：在Web后台设置页配置（推荐）
+
+启动Web后台后，进入"⚙️ 设置" → "📧 邮箱配置"卡片：
+1. 选择邮箱供应商（Gmail / QQ / 163 / Outlook / 自定义）
+2. 填写邮箱地址
+3. 填写应用密码/授权码（SMTP/IMAP服务器会自动填充）
+4. 点击保存
+
+#### 方式二：创建 gmail_config.txt 文件（兼容旧版）
+
+在数据目录中创建 `gmail_config.txt`：
 ```
 email=your_email@gmail.com
 password=your_app_password
 ```
+
+#### 各邮箱获取授权码/应用密码的方法
+
+| 邮箱 | 获取方式 |
+|------|----------|
+| **Gmail** | Google账户 > 安全性 > 两步验证 > 应用密码 |
+| **QQ邮箱** | QQ邮箱 > 设置 > 账户 > 开启IMAP/SMTP服务 > 生成授权码 |
+| **163邮箱** | 163邮箱 > 设置 > POP3/SMTP/IMAP > 开启IMAP/SMTP > 设置客户端授权密码 |
+| **Outlook** | Microsoft账户 > 安全 > 应用密码 |
+
+> **注意**：国内网络访问Gmail SMTP/IMAP需要代理。如无代理，建议使用QQ邮箱或163邮箱。
+
+#### 邮箱服务器配置参考
+
+| 邮箱 | SMTP | IMAP |
+|------|------|------|
+| Gmail | smtp.gmail.com:587 | imap.gmail.com:993 |
+| QQ邮箱 | smtp.qq.com:587 | imap.qq.com:993 |
+| 163邮箱 | smtp.163.com:587 | imap.163.com:993 |
+| Outlook | smtp.office365.com:587 | outlook.office365.com:993 |
 
 ### 步骤4：准备简历
 
@@ -167,7 +197,7 @@ password=your_app_password
 data-dir/
 ├── resume_zh.pdf    # 中文简历
 ├── resume_en.pdf    # 英文简历
-└── gmail_config.txt # Gmail配置
+└── gmail_config.txt # 邮箱配置（可选，也可在Web后台设置页配置）
 ```
 
 ### 步骤5：启动 Web 后台
@@ -225,6 +255,7 @@ python scripts/web_server.py --port 5000 --data-dir "/path/to/data"
 | GET | `/api/replies` | 收件箱回复 |
 | GET/POST | `/api/settings` | 读取/保存设置 |
 | GET | `/api/providers` | LLM供应商列表 |
+| GET | `/api/email-providers` | 邮箱供应商列表 |
 | POST | `/api/articles/refresh` | 启动文章刷新（非阻塞，后台线程） |
 | GET | `/api/articles/progress` | 查询刷新进度 |
 
@@ -320,21 +351,26 @@ result = analyze_article(article_dict, llm_client, user_profile_dict)
 
 ### 更换邮箱服务
 
-当前仅支持Gmail。更换其他邮箱需修改：
+支持 Gmail、QQ邮箱、163邮箱、Outlook 及自定义SMTP/IMAP。在Web后台设置页选择供应商即可自动配置服务器地址。
 
-| 文件 | 修改内容 |
-|------|----------|
-| `send_application_email.py` | SMTP服务器地址和端口 |
-| `check_inbox_replies.py` | IMAP服务器地址和端口 |
+如需添加新的邮箱供应商，修改 `web_server.py` 中的 `EMAIL_PROVIDERS` 字典：
 
-常见邮箱配置：
+```python
+EMAIL_PROVIDERS = {
+    "your_email": {
+        "name": "Your Email",
+        "smtp_server": "smtp.your-email.com",
+        "smtp_port": 587,
+        "imap_server": "imap.your-email.com",
+        "imap_port": 993,
+        "help": "如何获取授权码的说明",
+    },
+}
+```
 
-| 邮箱 | SMTP | IMAP |
-|------|------|------|
-| Gmail | smtp.gmail.com:587 | imap.gmail.com:993 |
-| Outlook | smtp.office365.com:587 | outlook.office365.com:993 |
-| QQ邮箱 | smtp.qq.com:587 | imap.qq.com:993 |
-| 163邮箱 | smtp.163.com:587 | imap.163.com:993 |
+脚本也支持独立运行（不依赖Web后台）：
+- `send_application_email.py`：新增 `--smtp-server` / `--smtp-port` 参数，或读取 `gmail_config.txt`
+- `check_inbox_replies.py`：新增 `--imap-server` / `--imap-port` / `--email` / `--password` 参数，或读取 `settings.json`
 
 ### 更换RSS源
 
