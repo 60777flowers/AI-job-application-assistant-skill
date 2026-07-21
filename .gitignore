@@ -1,0 +1,26 @@
+# 数据文件（含敏感信息，不提交）
+jobs.db
+settings.json
+articles_cache.json
+inbox_replies.json
+gmail_config.txt
+投递记录.csv
+daily_report_*.md
+
+# 简历文件
+resume_*.pdf
+简历_*.pdf
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 空目录占位
+assets/

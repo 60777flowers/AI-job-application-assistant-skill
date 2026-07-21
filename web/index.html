@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>求职投递管理后台</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ 顶栏 ═══ -->
+<header class="topbar">
+    <div class="topbar-left">
+        <h1 class="logo">📬 求职投递管理</h1>
+    </div>
+    <nav class="tabs">
+        <button class="tab active" data-tab="pending">
+            待发送 <span class="badge" id="badge-pending">0</span>
+        </button>
+        <button class="tab" data-tab="sent">
+            已发送 <span class="badge badge-green" id="badge-sent">0</span>
+        </button>
+        <button class="tab" data-tab="replies">
+            收件箱回复
+        </button>
+        <button class="tab" data-tab="settings">
+            ⚙️ 设置
+        </button>
+    </nav>
+    <div class="topbar-right">
+        <a href="http://localhost:8001" target="_blank" class="btn btn-outline btn-sm" title="管理公众号订阅">📡 公众号管理</a>
+        <button class="btn btn-sm" onclick="refreshArticles()" title="从公众号拉取最新文章并用AI分析">🔄 刷新文章</button>
+    </div>
+</header>
+
+<!-- ═══ 主体 ═══ -->
+<main class="main">
+
+    <!-- ── 待发送 / 已发送 列表+详情 ── -->
+    <section id="view-list" class="view active">
+        <!-- 左侧列表 -->
+        <div class="list-panel">
+            <div class="list-header">
+                <h2 id="list-title">待发送任务</h2>
+                <span class="list-count" id="list-count"></span>
+            </div>
+            <div class="job-list" id="job-list">
+                <div class="empty-state">暂无数据</div>
+            </div>
+        </div>
+
+        <!-- 右侧详情 -->
+        <div class="detail-panel" id="detail-panel">
+            <div class="empty-state detail-empty">
+                <div class="empty-icon">👈</div>
+                <p>从左侧选择一个投递任务查看详情</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── 收件箱回复 ── -->
+    <section id="view-replies" class="view">
+        <div class="replies-container">
+            <div class="replies-header">
+                <h2>📨 收件箱回复</h2>
+                <button class="btn btn-sm" onclick="loadReplies()">🔄 刷新回复</button>
+            </div>
+            <div id="replies-list">
+                <div class="empty-state">暂无回复数据</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── 设置 ── -->
+    <section id="view-settings" class="view">
+        <div class="settings-container">
+            <div class="settings-scroll">
+
+                <!-- LLM 配置 -->
+                <div class="settings-card">
+                    <h2>🤖 AI 模型配置</h2>
+                    <p class="settings-desc">配置 LLM API 用于自动分析JD和生成Cover Letter。支持 DeepSeek、Kimi、Qwen。</p>
+                    <div class="settings-grid">
+                        <div class="settings-item">
+                            <label>供应商</label>
+                            <select id="set-llm-provider" onchange="onProviderChange()">
+                                <option value="deepseek">DeepSeek</option>
+                                <option value="kimi">Kimi (Moonshot)</option>
+                                <option value="qwen">Qwen (通义千问)</option>
+                            </select>
+                        </div>
+                        <div class="settings-item">
+                            <label>模型</label>
+                            <select id="set-llm-model"></select>
+                        </div>
+                        <div class="settings-item full">
+                            <label>API Key</label>
+                            <input type="password" id="set-llm-api-key" placeholder="sk-..." autocomplete="off">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- we-mp-rss 配置 -->
+                <div class="settings-card">
+                    <h2>📡 公众号RSS配置</h2>
+                    <p class="settings-desc">
+                        we-mp-rss 服务地址和登录凭据。
+                        <a href="http://localhost:8001" target="_blank" style="color:var(--primary);">点击打开公众号管理后台 →</a>
+                    </p>
+                    <div class="settings-grid">
+                        <div class="settings-item">
+                            <label>服务地址</label>
+                            <input type="text" id="set-werss-url" placeholder="http://localhost:8001">
+                        </div>
+                        <div class="settings-item">
+                            <label>用户名</label>
+                            <input type="text" id="set-werss-user" placeholder="admin">
+                        </div>
+                        <div class="settings-item">
+                            <label>密码</label>
+                            <input type="password" id="set-werss-pass" placeholder="admin@123" autocomplete="off">
+                        </div>
+                        <div class="settings-item">
+                            <label>每次拉取文章数</label>
+                            <input type="number" id="set-article-limit" value="10" min="1" max="100">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 用户背景 -->
+                <div class="settings-card">
+                    <h2>👤 个人信息</h2>
+                    <p class="settings-desc">用于生成 Cover Letter 和邮件主题。请如实填写。</p>
+                    <div class="settings-grid">
+                        <div class="settings-item">
+                            <label>姓名</label>
+                            <input type="text" id="set-user-name" placeholder="你的姓名">
+
+                        </div>
+                        <div class="settings-item">
+                            <label>可实习时间</label>
+                            <input type="text" id="set-available-time" placeholder="每周5天，3个月以上">
+                        </div>
+                        <div class="settings-item full">
+                            <label>教育背景</label>
+                            <input type="text" id="set-user-education" placeholder="XX大学本科 + XX大学硕士">
+                        </div>
+                        <div class="settings-item full">
+                            <label>求职意向</label>
+                            <input type="text" id="set-job-pref" placeholder="硬科技企业、PE/VC、基金">
+                        </div>
+                        <div class="settings-item full">
+                            <label>排除项（不投递的岗位）</label>
+                            <input type="text" id="set-excluded" placeholder="券商投行、纯咨询">
+                        </div>
+                        <div class="settings-item full">
+                            <label>工作地点偏好</label>
+                            <input type="text" id="set-work-location" placeholder="深圳 > 上海 > 北京">
+                        </div>
+                        <div class="settings-item full">
+                            <label>邮件主题格式</label>
+                            <input type="text" id="set-email-subject" placeholder="姓名+本科院校+研究生院校+专业+年级+毕业时间">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-actions">
+                    <button class="btn btn-green" onclick="saveSettings()">💾 保存设置</button>
+                    <button class="btn btn-outline" onclick="testLLM()">🧪 测试AI连接</button>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<!-- ═══ Toast ═══ -->
+<div id="toast" class="toast"></div>
+
+<!-- ═══ 进度条弹窗 ═══ -->
+<div id="progress-overlay" class="progress-overlay">
+    <div class="progress-modal">
+        <div class="progress-icon" id="progress-icon">🔄</div>
+        <h3 id="progress-title">正在刷新文章</h3>
+        <p class="progress-subtitle" id="progress-subtitle">请耐心等待...</p>
+        <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+        </div>
+        <div class="progress-stats">
+            <span id="progress-count">0 / 0</span>
+            <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-detail" id="progress-detail"></div>
+        <div class="progress-badges" id="progress-badges"></div>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

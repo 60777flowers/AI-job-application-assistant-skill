@@ -14,9 +14,75 @@ description: >-
 1. 通过 we-mp-rss 监控微信公众号招聘文章
 2. 自动提取JD关键信息（岗位、公司、要求、投递方式）
 3. 根据JD语言智能选择简历版本（中文/英文）和Cover Letter语言
-4. 通过Gmail SMTP自动发送带附件的申请邮件
-5. 通过IMAP自动检查收件箱中的求职回复（面试邀请等）
-6. 记录投递历史，避免重复投递
+4. **AI Agent将分析好的投递任务推送到Web管理后台**，用户在浏览器中查看、编辑、一键发送
+5. 通过Gmail SMTP自动发送带附件的申请邮件（由Web后台触发）
+6. 通过IMAP自动检查收件箱中的求职回复（面试邀请等），结果在Web后台展示
+7. 记录投递历史，避免重复投递
+
+## Web管理后台（核心交互界面）
+
+本skill提供本地Web管理后台，是AI Agent与用户之间的桥梁：
+- **AI Agent** 负责获取JD、分析匹配度、生成Cover Letter，将结果通过API写入数据库
+- **用户** 在浏览器中查看所有待发送任务，可编辑Cover Letter/邮箱/主题，确认后一键发送
+
+### 启动Web后台
+
+```bash
+# 首次需安装Flask
+pip install flask
+
+# 启动服务（--data-dir 指定简历、数据库、投递记录所在目录）
+python scripts/web_server.py --port 5000 --data-dir "简历文件夹路径"
+```
+
+启动后访问 http://127.0.0.1:5000
+
+### Web后台功能
+
+| 功能 | 说明 |
+|------|------|
+| 待发送/已发送 | 查看投递任务列表，编辑Cover Letter/邮箱/主题，一键发送 |
+| 收件箱回复 | 展示 `inbox_replies.json` 中的求职回复，面试邀请高亮 |
+| **设置** | 配置 LLM API Key（DeepSeek/Kimi/Qwen）、用户背景信息、we-mp-rss凭据 |
+| **刷新文章** | 一键从公众号拉取最新文章，LLM自动分析JD+生成Cover Letter+创建投递任务 |
+| **公众号管理** | 外链跳转到 we-mp-rss 管理后台 (http://localhost:8001)，添加/管理公众号 |
+
+> **刷新文章流程**：用户点击"刷新文章" → 后端调用 `fetch_rss_articles.py` 拉取文章 → 调用 `jd_analyzer.py` 用LLM分析每篇文章 → 非招聘信息自动跳过 → 招聘信息创建投递任务（含Cover Letter）→ 如果JD未提供邮箱则留空，等用户手动填写。
+
+### Web后台 API（供AI Agent调用）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/jobs?status=pending` | 获取待发送任务列表 |
+| POST | `/api/jobs` | 创建单个投递任务 |
+| POST | `/api/jobs/batch` | 批量创建投递任务 |
+| GET | `/api/jobs/<id>` | 获取任务详情 |
+| PUT | `/api/jobs/<id>` | 更新任务（编辑Cover Letter等） |
+| POST | `/api/jobs/<id>/send` | 发送该任务的邮件 |
+| POST | `/api/jobs/<id>/skip` | 跳过该任务 |
+| DELETE | `/api/jobs/<id>` | 删除任务 |
+| GET | `/api/stats` | 获取统计数据（待发送/已发送/失败数量） |
+| GET | `/api/replies` | 获取收件箱回复 |
+
+### 创建投递任务的JSON格式
+
+```json
+{
+  "company": "BAI资本",
+  "position": "投资实习生",
+  "location": "上海",
+  "jd_summary": "BAI资本招聘投资实习生...",
+  "jd_detail": "岗位职责：\n1. 行业研究...\n2. 项目尽职调查...",
+  "requirements": "1. 重点大学本科或以上...\n2. 对投资有热情...",
+  "receiver_email": "internbai.sh@gmail.com",
+  "subject": "张三+XX大学+XX大学+专业+年级+毕业时间",
+  "cover_letter": "尊敬的BAI资本招聘团队：\n\n我是XX大学XX专业的硕士研究生...",
+  "resume_version": "zh",
+  "match_score": 5,
+  "source_url": "https://mp.weixin.qq.com/s/xxx",
+  "source_mp": "清北资源"
+}
+```
 
 ## 前置条件（需与用户确认）
 
@@ -128,10 +194,27 @@ description: >-
 2. **判断语言**：JD为英文→使用英文简历和英文Cover Letter；JD为中文→使用中文简历和中文申请信
 3. **匹配评估**：根据用户背景评估匹配度
 4. **生成Cover Letter**：基于简历内容，撰写简洁的申请信，突出匹配点
-5. **用户审核**：展示Cover Letter和投递信息，等待用户确认
-6. **准备附件**：将对应语言版本的简历复制并重命名为邮件主题格式
-7. **发送邮件**：执行 `scripts/send_application_email.py` 脚本发送邮件
-8. **记录投递**：将投递信息追加到 `投递记录.csv`
+5. **推送到Web后台**：调用 `POST /api/jobs` 将投递任务写入数据库（需确保web_server.py正在运行）
+
+   **⚠️ 重要：必须使用 push_job.py 脚本推送，不要用 PowerShell 的 curl/Invoke-RestMethod**（会有中文编码问题）：
+
+   ```bash
+   # 方式1：JSON文件模式（推荐，Cover Letter较长时用此方式）
+   # 先将任务数据写入临时JSON文件，再推送
+   python scripts/push_job.py --json-file /tmp/job.json
+
+   # 方式2：批量推送
+   python scripts/push_job.py --batch --json-file /tmp/jobs.json
+
+   # 方式3：参数模式（适合简单任务）
+   python scripts/push_job.py --company "BAI资本" --position "投资实习生" --email "hr@bai.com" --subject "主题" --cover-letter "正文"
+   ```
+
+6. **通知用户**：告知用户已将投递任务推送到Web后台，请在浏览器中查看并确认发送
+7. **用户操作**：用户在Web后台查看任务详情，可编辑Cover Letter/邮箱/主题，点击"一键发送"
+8. **邮件发送**：Web后台调用 `send_application_email.py` 发送邮件，并自动记录到 `投递记录.csv`
+
+> **批量推送**：如果有多篇文章需要投递，可使用 `POST /api/jobs/batch` 一次性推送多个任务。
 
 ### 流程3：收件箱求职回复检查（定时触发）
 
@@ -142,8 +225,8 @@ description: >-
    - 搜索求职关键词（面试/offer/简历/感谢/申请/岗位/实习/interview等）
 2. **识别面试邀请**：脚本自动判断是否包含面试关键词（面试/interview/一面/二面/终面/笔试等）
 3. **输出结果**：
-   - 如有面试邀请，重点标注提醒用户尽快回复
-   - 如有已知公司回复，展示发件人、主题、正文摘要
+   - 结果保存为 `inbox_replies.json`，Web后台自动读取并在"收件箱回复"标签页展示
+   - 面试邀请会以红色高亮标注，提醒用户尽快回复
 4. **更新投递记录**：如收到回复，更新 `投递记录.csv` 中的状态列
 
 ### 流程4：投递记录查询
@@ -152,6 +235,31 @@ description: >-
 字段：日期,公司,岗位,工作地点,投递邮箱,邮件主题,简历版本,状态
 
 ## 关键脚本
+
+### scripts/web_server.py
+Web管理后台服务（Flask），是AI Agent与用户交互的核心界面。
+- AI Agent通过REST API将投递任务写入数据库
+- 用户在浏览器中查看、编辑、一键发送
+- 自动调用 `send_application_email.py` 发送邮件并记录到 `投递记录.csv`
+- 自动读取 `inbox_replies.json` 在前端展示收件箱回复
+
+启动方式：`python scripts/web_server.py --port 5000 --data-dir "简历文件夹路径"`
+依赖：`pip install flask`
+
+### scripts/push_job.py
+推送投递任务到Web管理后台。AI Agent生成Cover Letter后，通过此脚本将任务写入数据库。
+**必须使用此脚本而非curl/Invoke-RestMethod**，避免PowerShell中文编码问题。
+调用方式：`python scripts/push_job.py --json-file job.json` 或 `python scripts/push_job.py --company "..." --position "..." ...`
+
+### scripts/llm_client.py
+统一 LLM 客户端，支持 DeepSeek / Kimi(Moonshot) / Qwen(DashScope)，三家均兼容 OpenAI API 格式。
+Web后台的"刷新文章"功能通过此模块调用 LLM 分析JD和生成Cover Letter。
+API Key 在 Web后台设置页面配置，存储在 `settings.json`。
+
+### scripts/jd_analyzer.py
+JD 分析器，使用 LLM 从微信公众号文章中提取 JD 信息并生成 Cover Letter。
+流程：抓取文章HTML → LLM判断是否招聘信息 → 提取公司/岗位/要求/邮箱 → LLM生成Cover Letter。
+如果文章中未提供投递邮箱，`receiver_email` 为空，等用户在Web后台手动填写。
 
 ### scripts/send_application_email.py
 通过Gmail SMTP发送带PDF附件的邮件。使用MIMEApplication处理附件，utf-8编码中文文件名。
@@ -191,7 +299,8 @@ description: >-
 ## 注意事项
 
 1. **we-mp-rss服务必须运行**：通过 `docker ps` 检查，如未运行则 `docker start we-mp-rss`
-2. **微信读书登录可能过期**：如RSS返回空，需在管理后台重新扫码登录
-3. **附件必须使用MIMEApplication**：使用MIMEBase会导致附件损坏
-4. **投递前必须用户确认**：不要自动发送，始终展示Cover Letter供用户审核
-5. **记录所有投递**：避免重复投递同一公司同一岗位
+2. **Web管理后台必须运行**：投递流程依赖Web后台，启动命令 `python scripts/web_server.py --data-dir "简历文件夹路径"`
+3. **微信读书登录可能过期**：如RSS返回空，需在管理后台重新扫码登录
+4. **附件必须使用MIMEApplication**：使用MIMEBase会导致附件损坏
+5. **投递前用户在Web后台确认**：AI Agent推送任务后，由用户在浏览器中点击"一键发送"
+6. **记录所有投递**：Web后台发送邮件后自动写入 `投递记录.csv`，避免重复投递
